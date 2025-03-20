@@ -3,7 +3,7 @@ import type { FileSink } from "bun";
 import {existsSync, mkdirSync} from 'node:fs'
 import type { SignupResponse, ValidationSuccessResponse, ValidatorOutgoing } from "common/types";
 import { TransactionFolder } from "./config";
-import { generateKeypair } from "./lib/util";
+import { saveKeypair } from "./lib/util";
 
 class WebSocketClient {
     private ws: WebSocket | null = null;
@@ -20,9 +20,9 @@ class WebSocketClient {
         private heartbeatIntervalMs: number = 30000,
         private reconnectIntervalMs: number = 5000
     ) {
-        //Handle the Keypair 
         // Make the transaction folder and files
         this.createTransactionFolder();
+        //Handle the Keypair 
         this.loadKeyPair();
     }
 
@@ -94,11 +94,12 @@ class WebSocketClient {
             this.connect();
         }, this.reconnectIntervalMs);
     }
-    private async loadKeyPair(){
+    private loadKeyPair(){
         const privateKey = process.env.PRIVATE_KEY;
         if (!privateKey){
             console.warn('No "PRIVATE_KEY" found in the environment. Generating a new one in keys folder.');
-            this.keypair = await generateKeypair();
+            this.keypair = Keypair.generate();
+            saveKeypair(this.keypair);
         }else{
             this.keypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(privateKey)));
         }
