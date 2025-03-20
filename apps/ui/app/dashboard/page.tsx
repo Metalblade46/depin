@@ -1,12 +1,13 @@
 "use client";
 import React, { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Globe, Plus } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, Globe, Plus } from "lucide-react";
 import { Modal } from "../../components/Modal";
 import useWebsite from "@/hooks/useWebsite";
 import axios from "axios";
 import { API_BACKEND_URL } from "@/config";
 import { useAuth } from "@clerk/nextjs";
 import { processWebsites } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
 // Mock data - in a real app, this would come from an API
 // const mockWebsites: Website[] = [
@@ -39,6 +40,7 @@ export default function Dashboard() {
   const [newWebsiteUrl, setNewWebsiteUrl] = useState("");
   const { websites, refreshWebsites } = useWebsite();
   const { getToken } = useAuth();
+  const router = useRouter();
 
   const toggleWebsite = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
@@ -72,12 +74,15 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20">
+    <div className="min-h-[93vh] bg-gray-50 dark:bg-gray-900 pt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Website Monitoring Dashboard
-          </h1>
+          <div className="flex items-center space-x-4">
+            <ArrowLeft className="h-8 w-8 hover:text-blue-400 cursor-pointer" onClick={router.back}/>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Website Monitoring Dashboard
+            </h1>
+          </div>
           <button
             onClick={() => setIsModalOpen(true)}
             className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
@@ -116,11 +121,12 @@ export default function Dashboard() {
                   <span className="text-sm text-gray-500 dark:text-gray-400">
                     {website.url}
                   </span>
+                  <span className={`text-sm ${website.averageLatency>900? 'text-red-500': website.averageLatency> 500? 'text-yellow-500':'text-green-500'}`}>{website.averageLatency.toFixed(2) } ms</span>
                 </div>
                 <div className="flex gap-2 items-center">
                   <span
                     className={`text-sm font-medium ${
-                      website.uptimePercentage
+                      website.uptimePercentage!=null
                         ? website.uptimePercentage >= 99
                           ? "text-green-600 dark:text-green-400"
                           : website.uptimePercentage >= 95
@@ -129,8 +135,7 @@ export default function Dashboard() {
                         : "text-gray-600 dark:text-gray-400"
                     }`}
                   >
-                    {website.uptimePercentage &&
-                      website.uptimePercentage + " % uptime"}
+                    {website.uptimePercentage==null || website.uptimePercentage.toFixed(2) + " % uptime"}
                   </span>
                   {expandedId === website.id ? (
                     <ChevronUp className="w-5 h-5 text-gray-500" />
@@ -175,7 +180,7 @@ export default function Dashboard() {
                           }`}
                           title={
                             `${30 - index * 3} minutes ago: ${tick} ` +
-                            `${website.latencies[index] ? website.latencies[index] + " ms" : ""}`
+                            `${website.latencies[index]!=1000 ? website.latencies[index] + " ms" : ""}`
                           }
                         />
                       ))}

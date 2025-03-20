@@ -3,7 +3,7 @@ import type { FileSink } from "bun";
 import {existsSync, mkdirSync} from 'node:fs'
 import type {ValidatorIncoming, ValidatorOutgoing } from "common/types";
 import { TransactionFolder } from "./config";
-import { getUrlDetails, saveKeypair, signMessage } from "./lib/util";
+import { getCurrentDateTime, getUrlDetails, saveKeypair, signMessage } from "./lib/util";
 import { randomUUIDv7 as v7 } from "bun";
 
 class WebSocketClient {
@@ -33,9 +33,9 @@ class WebSocketClient {
         
         this.ws.addEventListener('open', () => {
             console.log('Connected to WebSocket server');
+            this.createTransactionFile();
             this.isPongReceived = true;
             this.startHeartbeat();
-            this.createTransactionFile();
             this.signUp();
         });
 
@@ -122,10 +122,10 @@ class WebSocketClient {
             this.fileWriter?.ref();
             switch (data.messageType){
                 case 'validation success':
-                    this.fileWriter?.write(`${++this.transactions}    ${url}    Successful`);
+                    this.fileWriter?.write(`${++this.transactions}    ${url}    Successful\n`);
                     break;
                 case'server error':
-                this.fileWriter?.write(`${++this.transactions}    ${url}    Hub Error`);
+                this.fileWriter?.write(`${++this.transactions}    ${url}    Hub Error\n`);
                     break;
                 default:
                     console.warn('Received unknown message type:', data);
@@ -211,8 +211,10 @@ class WebSocketClient {
     }
     private async createTransactionFile() {
         const filePath = `${TransactionFolder}/transaction_${Date.now()}.txt`;
-        await Bun.write(filePath,'TXN    URL    STATUS\n')
+        await Bun.write(filePath,'');
         this.fileWriter = Bun.file(filePath).writer() ;
+        const date = new Date();
+        this.fileWriter.write(`Transactions started at ${getCurrentDateTime()}\nTXN        URL                 STATUS\n`);
         this.fileWriter.unref();
     }
     public sendMessage(data: ValidatorOutgoing): void {

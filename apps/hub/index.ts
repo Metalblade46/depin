@@ -105,7 +105,6 @@ const validateHandler = async (validateData: ValidateResponse, websiteId: string
 }
 
 const sendMessage = (ws:ServerWebSocket<unknown>,data:HubOutgoing)=>{
-    console.log('Outgoing-',data);
     ws.send(JSON.stringify(data));
 }
 const sendMessageAndRegisterCallback = (validator: { validatorId: string, ws: ServerWebSocket<unknown> }, website: {
@@ -191,7 +190,6 @@ const server = Bun.serve({
     websocket: {
         message: async (ws: ServerWebSocket<unknown>, message: string) => {
             const data = JSON.parse(message) as HubIncoming
-            console.log(`Incoming-`,data);
             if (data.messageType == 'ping')
                 sendMessage(ws,{messageType:'pong'});
             else if (data.messageType == 'signup') {

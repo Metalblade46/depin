@@ -23,28 +23,6 @@ app.post('/api/v1/website', async(req, res) => {
     })
 
 })
-app.get('/api/v1/website/status', async (req, res) => {
-    const {websiteId} = req.query;
-    const userId = req.userId;
-    const data = await prismaClient.website.findFirst({
-        where: {
-            id: websiteId as string,
-            userId,
-            disabled:false,
-            WebsiteTicks:{
-                every:{
-                    timestamp:{
-                        gte: new Date(Date.now()-(30*60*1000))
-                    }
-                }
-            }
-        },
-        include:{
-            WebsiteTicks: true
-        }
-    })
-    res.json(data);
-})
 
 app.get('/api/v1/websites', async (req, res) => {
     const {userId} = req;
@@ -52,18 +30,14 @@ app.get('/api/v1/websites', async (req, res) => {
         where:{
             userId,
             disabled:false,
-            // WebsiteTicks:{
-            //     every:{
-            //         timestamp:{
-            //             gte: new Date(Date.now()-(30*60*1000))
-            //         }
-            //     }
-            // }
         },
         include:{
-            WebsiteTicks:true,
-        },
-
+            WebsiteTicks:{
+                where:{
+                    timestamp: {gte: new Date(Date.now() - 30*60*1000)}
+                }
+            }
+        }
     }) 
     res.json({
         websites:data

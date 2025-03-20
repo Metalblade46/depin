@@ -28,6 +28,7 @@ type ProcessedWebite = {
   status: Status;
   uptimeHistory: Status[];
   latencies: (number|null)[];
+  averageLatency: number;
   uptimePercentage: number|null  // true for up, false for down
 }
 export const processWebsites = (websites: Website[]):ProcessedWebite[]=>{
@@ -39,6 +40,7 @@ export const processWebsites = (websites: Website[]):ProcessedWebite[]=>{
         status: "Unknown",
         latencies:[...Array(10).fill(null)],
         uptimeHistory:[...Array(10).fill("Unknown")],
+        averageLatency: 1000,
         uptimePercentage:null
       };
       if(website.WebsiteTicks.length){
@@ -58,14 +60,16 @@ export const processWebsites = (websites: Website[]):ProcessedWebite[]=>{
          
           const upTicks = ticks.filter(tick=>tick.status=="Up").length;
           processed.uptimeHistory[9-i] = ticks.length ==0 ? "Unknown" : upTicks/ticks.length>=0.5 ? "Up" : "Down";
-          processed.latencies[9-i] = ticks.length == 0 ? null: latency/ticks.length
+          processed.latencies[9-i] = ticks.length == 0 ? 1000: Math.floor(latency/ticks.length);
         }
         //Calculating overall uptime percentage
         const allTicks =website.WebsiteTicks
         const upTicks = allTicks.filter(tick=>tick.status=="Up").length;
         processed.uptimePercentage = allTicks.length ==0 ? null : parseFloat((upTicks/allTicks.length*100).toFixed(2))
         processed.status = processed.uptimeHistory[9]
-        
+        let totalLatencies = 0;
+        allTicks.forEach(tick=>{totalLatencies+=tick.latency})
+        processed.averageLatency= totalLatencies/allTicks.length;
       }
       return processed
   })
