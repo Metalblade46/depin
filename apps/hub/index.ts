@@ -1,5 +1,5 @@
 import { randomUUIDv7 as v7, type ServerWebSocket } from "bun";
-import type { HubIncoming, SignUpRequest, SignupResponse, ValidateRequest, ValidateResponse } from 'common/types';
+import type { HubIncoming, HubOutgoing, SignUpRequest, SignupResponse, ValidateRequest, ValidateResponse } from 'common/types';
 import { prismaClient as db } from "db/client"
 import { PublicKey } from "@solana/web3.js";
 import nacl from 'tweetnacl';
@@ -24,7 +24,7 @@ const verifyMessage = (message: string, publicKey: string, signedMessage: string
     // console.log("Verified:", verified);
     // return verified
 
-    const signedMessageBytes = nacl_util.decodeUTF8(signedMessage);
+    const signedMessageBytes = nacl_util.decodeBase64(signedMessage);
     const verified = nacl.sign.detached.verify(nacl_util.decodeUTF8(message),signedMessageBytes,bs58.decode(publicKey))
     return verified
 }
@@ -36,7 +36,7 @@ const signupHandler = async (ws: ServerWebSocket<unknown>, signupData: SignUpReq
             }
         })
         if (!verifyMessage(`Signed message for ${signupData.callbackId}, ${signupData.publicKey}`, signupData.publicKey, signupData.signature)) {
-            ws.send(JSON.stringify({ messageType: "Invalid Signature" }))
+            sendMessage(ws,{messageType:'invalid signature'})
             return;
         }
         const response: SignupResponse = {
@@ -60,14 +60,10 @@ const signupHandler = async (ws: ServerWebSocket<unknown>, signupData: SignUpReq
             validatorId: validator.id,
             ws
         })
-        ws.send(JSON.stringify(response));
+        sendMessage(ws,{messageType:'signup',data:response});
     } catch (error) {
         console.log(error);
-        ws.send(JSON.stringify({
-            messageType: 'server error', data: {
-                callbackId: signupData.callbackId
-            }
-        }))
+        sendMessage(ws,{messageType:'server error',data:{callbackId:signupData.callbackId}})
     }
     
 }
@@ -76,7 +72,7 @@ const validateHandler = async (validateData: ValidateResponse, websiteId: string
     const { callbackId, latency, signature, status, publicKey } = validateData;
     const verified = verifyMessage(`Reply for ${callbackId} ${publicKey}`, publicKey, signature);
     if (!verified) {
-        ws.send(JSON.stringify({ messageType: "Invalid Signature" }))
+        sendMessage(ws,{messageType:'server error',data:{callbackId}})
         return;
     }
     try{
@@ -108,7 +104,10 @@ const validateHandler = async (validateData: ValidateResponse, websiteId: string
     }
 }
 
-
+const sendMessage = (ws:ServerWebSocket<unknown>,data:HubOutgoing)=>{
+    console.log('Outgoing-',data);
+    ws.send(JSON.stringify(data));
+}
 const sendMessageAndRegisterCallback = (validator: { validatorId: string, ws: ServerWebSocket<unknown> }, website: {
     id: string;
     url: string;
@@ -119,23 +118,15 @@ const sendMessageAndRegisterCallback = (validator: { validatorId: string, ws: Se
         callbackId: v7(),
         url: website.url
     }
-    validator.ws.send(JSON.stringify(message));
+    sendMessage(validator.ws,{messageType:'validate',data:message})
     CALLBACKS.set(message.callbackId, async (data: ValidateResponse) => {
         try {
         await validateHandler(data, website.id, validator.validatorId, validator.ws);
         if (validator.ws.readyState == WebSocket.OPEN)
-            validator.ws.send(JSON.stringify({
-                messageType: 'validation success', data: {
-                    callbackId: message.callbackId
-                }
-            }))
+            sendMessage(validator.ws,{messageType:'validation success',data:{callbackId:message.callbackId}})
         } catch (error) {
             if (validator.ws.readyState == WebSocket.OPEN)
-                validator.ws.send(JSON.stringify({
-                    messageType: 'server error', data: {
-                        callbackId: message.callbackId
-                    }
-                }))
+                sendMessage(validator.ws,{messageType:'server error',data:{callbackId:message.callbackId}})
         }finally{
             CALLBACKS.delete(data.callbackId);
         }
@@ -161,10 +152,9 @@ const sendValidationRequests = async () => {
         while (websites.length) {
             const index = Math.floor(Math.random() * tempValidators.length);
             const validator = tempValidators[index];
-            const website = websites[0];
-            sendMessageAndRegisterCallback(validator, website)
+            sendMessageAndRegisterCallback(validator, websites[0])
             tempValidators.splice(index, 1); // to avoid same validator getting multiple validation requests
-            websites.splice(0, 1);
+            websites.shift();
         }
     } else {
         //distribute websites among each
@@ -175,8 +165,7 @@ const sendValidationRequests = async () => {
 
             for (let j = 0; j < websitePerValidator; j++) {
                 const randWebIndex = Math.floor(Math.random() * websites.length);
-                const website = websites[randWebIndex];
-                sendMessageAndRegisterCallback(validator, website)
+                sendMessageAndRegisterCallback(validator, websites[randWebIndex])
                 websites.splice(randWebIndex, 1);
             }
 
@@ -202,9 +191,10 @@ const server = Bun.serve({
     websocket: {
         message: async (ws: ServerWebSocket<unknown>, message: string) => {
             const data = JSON.parse(message) as HubIncoming
+            console.log(`Incoming-`,data);
             if (data.messageType == 'ping')
-                return
-            if (data.messageType == 'signup') {
+                sendMessage(ws,{messageType:'pong'});
+            else if (data.messageType == 'signup') {
                 signupHandler(ws, data.data)
             } else {
                 const cb = CALLBACKS.get(data.data.callbackId);

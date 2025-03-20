@@ -1,9 +1,10 @@
 import { Keypair } from "@solana/web3.js";
 import type { FileSink } from "bun";
 import {existsSync, mkdirSync} from 'node:fs'
-import type { SignupResponse, ValidationSuccessResponse, ValidatorOutgoing } from "common/types";
+import type {ValidatorIncoming, ValidatorOutgoing } from "common/types";
 import { TransactionFolder } from "./config";
-import { saveKeypair } from "./lib/util";
+import { getUrlDetails, saveKeypair, signMessage } from "./lib/util";
+import { randomUUIDv7 as v7 } from "bun";
 
 class WebSocketClient {
     private ws: WebSocket | null = null;
@@ -12,8 +13,9 @@ class WebSocketClient {
     private isPongReceived: boolean = false;
     private keypair:Keypair|null=null;
     private validatorId: string|null = null;
-    private callbacks: Map<string, (data: SignupResponse | ValidationSuccessResponse) => void> = new Map();
+    private callbacks: Map<string, (data: ValidatorIncoming) => void> = new Map();
     private fileWriter:FileSink|null = null;
+    private transactions:number =0
 
     constructor(
         private url: string,
@@ -28,16 +30,42 @@ class WebSocketClient {
 
     public connect(): void {
         this.ws = new WebSocket(this.url);
-
+        
         this.ws.addEventListener('open', () => {
             console.log('Connected to WebSocket server');
             this.isPongReceived = true;
             this.startHeartbeat();
             this.createTransactionFile();
+            this.signUp();
         });
 
         this.ws.addEventListener('message', event => {
-            console.log('Received message:', event.data.toString());
+            const data = JSON.parse(event.data) as ValidatorIncoming;
+            console.log(data);
+            switch (data.messageType){
+                case 'pong':
+                    console.log('Pong from Hub!');
+                    this.isPongReceived = true;
+                    break;
+                case 'invalid signature':
+                    console.error('Received an invalid signature from the Hub');
+                    throw new Error('Invalid signature received from the Hub, Please check your private and public keys and try running Validator again.');
+                case'signup':
+                    this.handleSignup(data);
+                    break;
+                case 'validate':
+                    this.handleValidation(data);
+                    break;
+                case 'validation success':
+                    this.handleValidationSuccessOrError(data);
+                    break;
+                case'server error':
+                    console.error('Received a server error:', data);
+                    this.handleValidationSuccessOrError(data);
+                    break;
+                default:
+                    console.warn('Received unknown message type:', data);
+            }
         });
 
         this.ws.addEventListener('close', async() => {
@@ -50,6 +78,7 @@ class WebSocketClient {
                 await this.fileWriter.end();
                 this.fileWriter = null;
             }
+            this.transactions=0;
             console.log('WebSocket connection closed.');
         });
 
@@ -63,6 +92,75 @@ class WebSocketClient {
             this.reconnect();
         });
     }
+    private handleValidationSuccessOrError(data: ValidatorIncoming) {
+        if(data.messageType=='server error' || data.messageType=='validation success')
+        this.callbacks.get(data.data.callbackId)?.(data);
+    }
+    private async handleValidation(data: ValidatorIncoming) {
+        if (!this.validatorId) {
+            throw new Error('Validator ID is not set. Please signup before validating.');
+        }
+        if (!this.keypair){
+            throw new Error('Keypair is not set. Please generate keypair before validating.');
+        }
+        if (data.messageType!='validate')
+            return;
+        const {callbackId,url} = data.data;
+        const {latency,status} = await getUrlDetails(url);
+        const signature = signMessage("validate",callbackId,this.keypair);
+        this.sendMessage({
+            messageType: 'validate',
+            data: {
+                callbackId: data.data.callbackId,
+                latency,
+                status,
+                publicKey: this.keypair.publicKey.toBase58(),
+                signature
+            }
+        });
+        this.callbacks.set(callbackId,(data)=>{
+            this.fileWriter?.ref();
+            switch (data.messageType){
+                case 'validation success':
+                    this.fileWriter?.write(`${++this.transactions}    ${url}    Successful`);
+                    break;
+                case'server error':
+                this.fileWriter?.write(`${++this.transactions}    ${url}    Hub Error`);
+                    break;
+                default:
+                    console.warn('Received unknown message type:', data);
+            }
+        })
+    }
+    private handleSignup(data: ValidatorIncoming) {
+        if(data.messageType!='signup')
+            return;
+        const {callbackId} = data.data;
+        this.callbacks.get(callbackId)?.(data);
+    }
+    private signUp(){
+        if (!this.keypair)
+            throw new Error('Keypair is not set. Please generate keypair before signing up.');
+        const callbackId = v7();
+        const signature = signMessage("signup", callbackId, this.keypair);
+        this.sendMessage({
+            messageType:'signup',
+            data: {
+                callbackId,
+                publicKey: this.keypair.publicKey.toBase58(),
+                signature
+            }
+        });
+        this.callbacks.set(callbackId,(data)=>{
+            if(data.messageType=='signup'){
+                this.validatorId = data.data.validatorId;
+                console.log('Signed up and validated successfully. Your Validator ID:', this.validatorId);
+            }else{
+                console.error('Received an error from the Hub');
+                throw new Error('Error received from the Hub, Please try running Validator later again.');
+            }
+        })
+    }
     private startHeartbeat(): void {
         this.heartbeatInterval = setInterval(() => {
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -73,6 +171,7 @@ class WebSocketClient {
                 } else {
                     this.isPongReceived = false; // Reset flag
                     this.sendMessage({messageType:'ping'}); // Send ping as a heartbeat
+                    console.log('Ping from Validator');
                 }
             }
         }, this.heartbeatIntervalMs);
@@ -112,7 +211,7 @@ class WebSocketClient {
     }
     private async createTransactionFile() {
         const filePath = `${TransactionFolder}/transaction_${Date.now()}.txt`;
-        await Bun.write(filePath,'TXN    URL    STATUS')
+        await Bun.write(filePath,'TXN    URL    STATUS\n')
         this.fileWriter = Bun.file(filePath).writer() ;
         this.fileWriter.unref();
     }
@@ -126,5 +225,5 @@ class WebSocketClient {
 
 }
 // Usage Example
-const wsClient = new WebSocketClient('wss://your-websocket-server-url');
-// wsClient.connect();
+const wsClient = new WebSocketClient('ws://localhost:8081');
+wsClient.connect();

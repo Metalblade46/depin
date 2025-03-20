@@ -35,8 +35,8 @@ export type HubIncoming = { messageType: 'ping' }
     }
 
 //Hub Outgoing
-export type HubOutgoing = {messageType: 'pong'}
-|{ messageType: 'Invalid Signature' }
+export type HubOutgoing = { messageType: 'pong' }
+    | { messageType: 'invalid signature' }
     | {
         messageType: 'signup'
         data: SignupResponse
@@ -55,31 +55,7 @@ export type HubOutgoing = {messageType: 'pong'}
 
 
 //Validator Incoming
-export type ValidatorIncoming ={messageType: 'pong'} 
-| { messageType: 'Invalid Signature' }
-    | {
-        messageType: 'signup'
-        data: SignupResponse
-    }
-    | {
-        messageType: 'validate',
-        data: ValidateRequest
-    }
-    | {
-        messageType: 'validation success',
-        data: ValidationSuccessResponse
-    }
-    | {
-        messageType: 'server error',
-        data: ServerErrorResponse
-    }
+export type ValidatorIncoming = HubOutgoing
 
 //Validator Outgoing
-export type ValidatorOutgoing = { messageType: 'ping' }
-    | {
-        messageType: 'signup'
-        data: SignUpRequest
-    } | {
-        messageType: 'validate',
-        data: ValidateResponse
-    }
+export type ValidatorOutgoing = HubIncoming
