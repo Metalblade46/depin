@@ -35,7 +35,8 @@ export type HubIncoming = { messageType: 'ping' }
     }
 
 //Hub Outgoing
-export type HubOutgoing = { messageType: 'Invalid Signature' }
+export type HubOutgoing = {messageType: 'pong'}
+|{ messageType: 'Invalid Signature' }
     | {
         messageType: 'signup'
         data: SignupResponse
@@ -54,7 +55,8 @@ export type HubOutgoing = { messageType: 'Invalid Signature' }
 
 
 //Validator Incoming
-export type ValidatorIncoming = { messageType: 'Invalid Signature' }
+export type ValidatorIncoming ={messageType: 'pong'} 
+| { messageType: 'Invalid Signature' }
     | {
         messageType: 'signup'
         data: SignupResponse
