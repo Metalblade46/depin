@@ -59,3 +59,21 @@ export type ValidatorIncoming = HubOutgoing
 
 //Validator Outgoing
 export type ValidatorOutgoing = HubIncoming
+
+export type WithdrawalRequest = {
+    amount: number;
+    signature: string;
+    publicKey: string;
+}
+export type LockingTask={
+    validatorId: string;
+    requestedAmount: number;
+}
+export type ProcessingTask={
+    validatorId: string;
+}
+export type UnlockingTask={
+    validatorId: string;
+    txnSignature?: string;
+    retryCount: number;
+}

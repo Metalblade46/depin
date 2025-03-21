@@ -14,8 +14,8 @@ datasource db {
 }
 
 model User {
-  id    String @id @default(uuid())
-  email String
+  id      String    @id @default(uuid())
+  email   String
   Website Website[]
 }
 
@@ -25,16 +25,19 @@ model Website {
   user         User           @relation(fields: [userId], references: [id])
   userId       String
   WebsiteTicks WebsiteTicks[]
-  disabled     Boolean         @default(false)
+  disabled     Boolean        @default(false)
 }
 
 model Validator {
-  id           String         @id @default(uuid())
-  publicKey    String
-  location     String
-  ip           String
-  pendingPayouts Int              @default(0)
-  WebsiteTicks WebsiteTicks[]
+  id               String         @id @default(uuid())
+  publicKey        String
+  location         String
+  ip               String
+  pendingPayouts   Int            @default(0)
+  requestedPayouts Int            @default(0)
+  locked           Boolean        @default(false)
+  WebsiteTicks     WebsiteTicks[]
+  Transactions     Transactions[]
 }
 
 model WebsiteTicks {
@@ -48,7 +51,23 @@ model WebsiteTicks {
   latency     Float?
 }
 
+model Transactions {
+  id          String    @id @default(uuid())
+  validator   Validator @relation(fields: [validatorId], references: [id])
+  validatorId String
+  txnSignature String 
+  timestamp   DateTime @default(now())
+  amount      Int
+  status      TransactionStatus  @default(PENDING)
+}
+
 enum Status {
   Up
   Down
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
 }
